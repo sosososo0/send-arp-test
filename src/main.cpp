@@ -88,37 +88,40 @@ void getMacAddressForIp(const char* ip, const char* iface, char* mac) {
         hwaddr[3], hwaddr[4], hwaddr[5]);
 }
 
-std::string getGatewayIp(const char* iface) {
-    std::ifstream routeFile("/proc/net/route");
-    std::string line;
-    std::string gatewayIp;
+void getMyIpAddress(const char* iface, char* ip) {
+    int fd;
+    struct ifreq ifr;
 
-    while (std::getline(routeFile, line)) {
-        std::istringstream iss(line);
-        std::string ifaceInFile, destination, gateway;
-        int flags;
-
-        if (!(iss >> ifaceInFile >> destination >> gateway >> std::hex >> flags))
-            continue;
-
-        if (ifaceInFile == iface && destination == "00000000") {
-            unsigned long gatewayLong = std::stoul(gateway, nullptr, 16);
-            struct in_addr ipAddr;
-            ipAddr.s_addr = gatewayLong;
-            gatewayIp = inet_ntoa(ipAddr);
-            break;
-        }
+    // 소켓 생성
+    fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd < 0) {
+        perror("socket");
+        return;
     }
 
-    return gatewayIp;
-}
+    // 인터페이스 이름 설정
+    strncpy(ifr.ifr_name, iface, IFNAMSIZ-1);
 
+    // 인터페이스의 IP 주소를 가져오기 위해 ioctl 호출
+    if (ioctl(fd, SIOCGIFADDR, &ifr) < 0) {
+        perror("ioctl");
+        close(fd);
+        return;
+    }
+
+    close(fd);
+
+    // IP 주소 형식화
+    struct sockaddr_in* ipaddr = (struct sockaddr_in*)&ifr.ifr_addr;
+    strcpy(ip, inet_ntoa(ipaddr->sin_addr));
+}
 
 #pragma pack(push, 1)
 struct EthArpPacket final {
 	EthHdr eth_;
 	ArpHdr arp_;
 };
+
 #pragma pack(pop)
 
 void usage() {
@@ -141,9 +144,10 @@ int main(int argc, char* argv[]) {
 	}
 
 	EthArpPacket packet;
-	char* my_ip = argv[2];
-	char* target_ip = argv[3];
-	string gateway_ip = getGatewayIp(dev);
+	char my_ip_buffer[16];
+	char* my_ip = getMyIpAddress(dev, my_ip_buffer); // 자신의 IP 주소 가져오기
+	char* target_ip = argv[2];
+	char* gateway_ip = argv[3];
 
 	char my_mac_buffer[18];
 	char target_mac_buffer[18];
@@ -151,7 +155,7 @@ int main(int argc, char* argv[]) {
 
 	getMacAddress(dev, my_mac_buffer);
 	getMacAddressForIp(target_ip, dev, target_mac_buffer);
-	getMacAddressForIp(gateway_ip.c_str(), dev, gateway_mac_buffer);
+	getMacAddressForIp(gateway_ip, dev, gateway_mac_buffer);
 
 	packet.eth_.dmac_ = Mac("ff:ff:ff:ff:ff:ff");// arp request
 	packet.eth_.smac_ = Mac(my_mac_buffer); // my mac
