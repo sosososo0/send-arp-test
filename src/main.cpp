@@ -145,7 +145,7 @@ int main(int argc, char* argv[]) {
 
 	EthArpPacket packet;
 	char my_ip_buffer[16];
-	char* my_ip = getMyIpAddress(dev, my_ip_buffer); // 자신의 IP 주소 가져오기
+	getMyIpAddress(dev, my_ip_buffer); // 자신의 IP 주소 가져오기
 	char* target_ip = argv[2];
 	char* gateway_ip = argv[3];
 
